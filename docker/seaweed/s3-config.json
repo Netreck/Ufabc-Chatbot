@@ -1,0 +1,19 @@
+{
+  "identities": [
+    {
+      "name": "localAdmin",
+      "credentials": [
+        {
+          "accessKey": "seaweed_local_access",
+          "secretKey": "seaweed_local_secret"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "Write",
+        "Tagging"
+      ]
+    }
+  ]
+}

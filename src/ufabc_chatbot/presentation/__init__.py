@@ -1,0 +1,1 @@
+"""Presentation layer: transport adapters."""
