@@ -22,6 +22,9 @@ from ufabc_chatbot.application.file_feed_service import FileFeedService, Incomin
 from ufabc_chatbot.core.dependencies import get_file_feed_service
 from ufabc_chatbot.domain.file_feed import FileFeedRecord, FileFeedStatus
 from ufabc_chatbot.presentation.api.file_feed_schemas import (
+    BatchUploadFileResult,
+    BatchUploadResponse,
+    BatchValidateResponse,
     CreateFolderRequest,
     CreateFolderResponse,
     FileTreeFolderResponse,
@@ -33,6 +36,7 @@ from ufabc_chatbot.presentation.api.file_feed_schemas import (
     RenameFeedFileRequest,
     RenameFolderRequest,
     UpdateFileFeedStatusRequest,
+    ValidateFileResult,
 )
 
 router = APIRouter()
@@ -114,6 +118,96 @@ async def upload_feed_file(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _to_response(record)
+
+
+@router.post("/files/feed/batch", response_model=BatchUploadResponse)
+async def batch_upload_feed_files(
+    files: list[UploadFile] = File(...),
+    storage_metadata: str | None = Form(default=None),
+    folder_path: str | None = Form(default=None),
+    service: FileFeedService = Depends(get_file_feed_service),
+) -> BatchUploadResponse:
+    parsed_storage_metadata = _parse_storage_metadata(storage_metadata)
+    results: list[BatchUploadFileResult] = []
+    succeeded = 0
+
+    for upload_file in files:
+        filename = upload_file.filename or "upload.bin"
+        try:
+            content = await upload_file.read()
+            incoming = IncomingFeedFile(
+                filename=filename,
+                content_type=upload_file.content_type,
+                content=content,
+            )
+            record = await service.ingest(
+                incoming,
+                storage_metadata=parsed_storage_metadata,
+                folder_path=folder_path,
+            )
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                success=True,
+                file=_to_response(record),
+            ))
+            succeeded += 1
+        except Exception as exc:
+            results.append(BatchUploadFileResult(
+                filename=filename,
+                success=False,
+                error=str(exc),
+            ))
+
+    return BatchUploadResponse(
+        total=len(files),
+        succeeded=succeeded,
+        failed=len(files) - succeeded,
+        results=results,
+    )
+
+
+@router.post("/files/feed/validate", response_model=BatchValidateResponse)
+async def validate_feed_files(
+    files: list[UploadFile] = File(...),
+    service: FileFeedService = Depends(get_file_feed_service),
+) -> BatchValidateResponse:
+    results: list[ValidateFileResult] = []
+
+    for upload_file in files:
+        filename = upload_file.filename or "upload.bin"
+        errors: list[str] = []
+
+        try:
+            content = await upload_file.read()
+        except Exception as exc:
+            results.append(ValidateFileResult(
+                filename=filename, valid=False, errors=[f"Failed to read file: {exc}"],
+            ))
+            continue
+
+        if not filename.lower().endswith(".md"):
+            errors.append("Only Markdown (.md) files are accepted.")
+
+        if not content:
+            errors.append("File is empty.")
+        elif len(content) > service._max_file_size_bytes:
+            errors.append(
+                f"File exceeds max size of {service._max_file_size_bytes // (1024 * 1024)} MB."
+            )
+
+        if content and filename.lower().endswith(".md"):
+            try:
+                service._extract_document_metadata(content)
+            except ValueError as exc:
+                errors.append(str(exc))
+
+        results.append(ValidateFileResult(
+            filename=filename,
+            valid=len(errors) == 0,
+            errors=errors,
+        ))
+
+    return BatchValidateResponse(results=results)
 
 
 @router.get("/files/tree", response_model=FileTreeResponse)

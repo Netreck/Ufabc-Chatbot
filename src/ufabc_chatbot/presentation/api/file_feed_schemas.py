@@ -66,3 +66,27 @@ class FileTreeFolderResponse(BaseModel):
 class FileTreeResponse(BaseModel):
     folders: list[FileTreeFolderResponse]
     files: list[FileFeedResponse]
+
+
+class BatchUploadFileResult(BaseModel):
+    filename: str
+    success: bool
+    file: FileFeedResponse | None = None
+    error: str | None = None
+
+
+class BatchUploadResponse(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[BatchUploadFileResult]
+
+
+class ValidateFileResult(BaseModel):
+    filename: str
+    valid: bool
+    errors: list[str] = []
+
+
+class BatchValidateResponse(BaseModel):
+    results: list[ValidateFileResult]
