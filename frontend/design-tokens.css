@@ -11,55 +11,59 @@
 
 :root {
   /* ── Night Background Scale ── */
-  --bg-deep:        #0a0e0f;
-  --bg-main:        #0f1514;
-  --bg-panel:       #141d1b;
-  --bg-panel-hover: #1a2725;
-  --bg-surface:     #1e2e2b;
-  --bg-elevated:    #243836;
-  --bg-overlay:     rgba(6, 10, 9, 0.88);
+  /* Neutral charcoal — no green tint, inspired by Linear/Vercel */
+  --bg-deep:        #09090b;
+  --bg-main:        #0f0f11;
+  --bg-panel:       #16161a;
+  --bg-panel-hover: #1c1c21;
+  --bg-surface:     #232329;
+  --bg-elevated:    #2a2a32;
+  --bg-overlay:     rgba(9, 9, 11, 0.85);
 
   /* ── Green Accent Scale ── */
-  --green-100:  #e8fdf3;
-  --green-200:  #a8f0cc;
-  --green-300:  #5ee8a5;
-  --green-400:  #2dd882;
-  --green-500:  #00c853;
-  --green-600:  #00a344;
-  --green-700:  #007d35;
-  --green-800:  #005a26;
-  --green-900:  #003a18;
+  /* Desaturated, mature greens — not neon */
+  --green-100:  #dcfce7;
+  --green-200:  #a7f3d0;
+  --green-300:  #6ee7b7;
+  --green-400:  #34d399;
+  --green-500:  #22c55e;
+  --green-600:  #16a34a;
+  --green-700:  #15803d;
+  --green-800:  #166534;
+  --green-900:  #14532d;
 
   /* ── Primary Accent (mapped) ── */
   --accent:       var(--green-500);
-  --accent-light: var(--green-300);
+  --accent-light: var(--green-400);
   --accent-soft:  var(--green-200);
   --accent-dim:   var(--green-700);
-  --accent-glow:  rgba(0, 200, 83, 0.15);
-  --accent-glow-strong: rgba(0, 200, 83, 0.30);
+  --accent-glow:  rgba(34, 197, 94, 0.08);
+  --accent-glow-strong: rgba(34, 197, 94, 0.16);
 
   /* ── Text Colors ── */
-  --text-primary:   #f0f5f3;
-  --text-secondary: #a8b8b3;
-  --text-muted:     #6b7f78;
-  --text-on-accent: #021a0c;
-  --text-link:      var(--green-300);
+  /* Neutral off-whites — no green cast */
+  --text-primary:   #ececef;
+  --text-secondary: #a0a0ab;
+  --text-muted:     #63636e;
+  --text-on-accent: #052e16;
+  --text-link:      var(--green-400);
 
   /* ── Semantic Colors ── */
   --ok:      #34d399;
-  --ok-bg:   rgba(52, 211, 153, 0.14);
+  --ok-bg:   rgba(52, 211, 153, 0.10);
   --warn:    #fbbf24;
-  --warn-bg: rgba(251, 191, 36, 0.14);
+  --warn-bg: rgba(251, 191, 36, 0.10);
   --fail:    #f87171;
-  --fail-bg: rgba(248, 113, 113, 0.14);
+  --fail-bg: rgba(248, 113, 113, 0.10);
   --info:    #60a5fa;
-  --info-bg: rgba(96, 165, 250, 0.14);
+  --info-bg: rgba(96, 165, 250, 0.10);
 
   /* ── Borders ── */
-  --border-subtle:  rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.10);
-  --border-strong:  rgba(255, 255, 255, 0.18);
-  --border-accent:  rgba(0, 200, 83, 0.30);
+  /* Solid neutral grays instead of white-alpha */
+  --border-subtle:  #1e1e23;
+  --border-default: #27272e;
+  --border-strong:  #333340;
+  --border-accent:  rgba(34, 197, 94, 0.25);
 
   /* ── Typography ── */
   --font-display: "Outfit", "Sora", system-ui, sans-serif;
@@ -111,11 +115,12 @@
   --radius-full: 999px;
 
   /* ── Shadows ── */
-  --shadow-sm:   0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md:   0 4px 12px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.2);
-  --shadow-lg:   0 12px 40px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-glow: 0 0 20px rgba(0, 200, 83, 0.15), 0 0 60px rgba(0, 200, 83, 0.06);
-  --shadow-modal: 0 24px 80px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.4);
+  /* Clean shadows with no green glow */
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-lg:   0 12px 36px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-glow: 0 0 0 1px rgba(34, 197, 94, 0.12), 0 2px 8px rgba(0,0,0,0.2);
+  --shadow-modal: 0 24px 64px rgba(0,0,0,0.55), 0 8px 20px rgba(0,0,0,0.35);
 
   /* ── Motion ── */
   --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
@@ -165,7 +170,7 @@
   --btn-ghost-color:  var(--text-secondary);
   --btn-ghost-hover:  var(--bg-surface);
   --btn-danger-bg:    var(--fail);
-  --btn-danger-color: #1a0606;
+  --btn-danger-color: #fef2f2;
 }
 
 /* Inputs */
