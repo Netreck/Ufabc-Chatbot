@@ -8,6 +8,11 @@ const fileInput = document.getElementById("file-input");
 const storageMetadataInput = document.getElementById("storage-metadata-input");
 const uploadResult = document.getElementById("upload-result");
 const uploadTargetFolder = document.getElementById("upload-target-folder");
+const uploadSubmitBtn = document.getElementById("upload-submit-btn");
+const uploadQueue = document.getElementById("upload-queue");
+const uploadQueueList = document.getElementById("upload-queue-list");
+const uploadQueueSummary = document.getElementById("upload-queue-summary");
+const uploadQueueClear = document.getElementById("upload-queue-clear");
 const refreshBtn = document.getElementById("refresh-btn");
 const createFolderForm = document.getElementById("create-folder-form");
 const createFolderInput = document.getElementById("create-folder-input");
@@ -62,6 +67,7 @@ let lastTreeHash = "";
 let ctxMenuFolderPath = null;
 let fileClickTimer = null;
 let folderClickTimer = null;
+let draggingFileId = "";
 const collapsedFolders = new Set(
   JSON.parse(localStorage.getItem("ufabc-collapsed-folders") || "[]"),
 );
@@ -176,7 +182,7 @@ function renderContextInfo() {
 
 function renderLoadedFiles() {
   if (selectedContextFileIds.size === 0) {
-    loadedFilesList.innerHTML = '<p class="loaded-files__empty">No files loaded for context.</p>';
+    loadedFilesList.innerHTML = '<p class="loaded-files__empty">No files loaded for context. Drag files here or click "Use in Smoke".</p>';
     return;
   }
 
@@ -385,7 +391,27 @@ async function refreshFilesystem({ force = false } = {}) {
   }
 }
 
-async function uploadFile(file, storageMetadataRaw) {
+// ── Upload Queue State ──
+let uploadQueueItems = []; // { id, file, status: 'pending'|'validating'|'uploading'|'success'|'error', error, result }
+let isUploading = false;
+
+function generateUploadId() {
+  return `uq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function validateFiles(files) {
+  const body = new FormData();
+  for (const file of files) body.append("files", file);
+  try {
+    const response = await fetch(`${apiBase}/files/feed/validate`, { method: "POST", body });
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function uploadSingleFile(file, storageMetadataRaw) {
   const body = new FormData();
   body.append("file", file);
   if (storageMetadataRaw && storageMetadataRaw.trim() !== "") {
@@ -399,6 +425,188 @@ async function uploadFile(file, storageMetadataRaw) {
     throw new Error(payload.detail || "Upload failed.");
   }
   return response.json();
+}
+
+function addFilesToQueue(fileList) {
+  const files = Array.from(fileList);
+  if (!files.length) return;
+
+  for (const file of files) {
+    uploadQueueItems.push({
+      id: generateUploadId(),
+      file,
+      status: "pending",
+      error: null,
+      validationErrors: [],
+      result: null,
+    });
+  }
+  renderUploadQueue();
+  uploadQueue.hidden = false;
+
+  // Validate all pending files immediately
+  validateQueuedFiles(files);
+}
+
+async function validateQueuedFiles(files) {
+  // Collect validating items in order matching the files array
+  const validatingItems = [];
+  for (const item of uploadQueueItems) {
+    if (item.status === "pending" && files.some((f) => f === item.file)) {
+      item.status = "validating";
+      validatingItems.push(item);
+    }
+  }
+  renderUploadQueue();
+
+  const validation = await validateFiles(files);
+  if (validation && validation.results) {
+    // Match by index — results come back in same order as files sent
+    for (let i = 0; i < validation.results.length; i++) {
+      const vr = validation.results[i];
+      const item = validatingItems[i];
+      if (!item) continue;
+      if (!vr.valid) {
+        item.status = "error";
+        item.validationErrors = vr.errors || [];
+        item.error = vr.errors.join(" \u2022 ");
+      } else {
+        item.status = "ready";
+        item.validationErrors = [];
+      }
+    }
+  } else {
+    // Validation endpoint failed — mark as ready anyway, upload will catch errors
+    for (const item of validatingItems) {
+      item.status = "ready";
+    }
+  }
+  renderUploadQueue();
+}
+
+async function processUploadQueue() {
+  if (isUploading) return;
+  isUploading = true;
+  uploadSubmitBtn.disabled = true;
+  uploadSubmitBtn.textContent = "Uploading...";
+
+  const storageMetadataRaw = storageMetadataInput.value;
+
+  for (const item of uploadQueueItems) {
+    if (item.status !== "ready") continue;
+    item.status = "uploading";
+    renderUploadQueue();
+
+    try {
+      item.result = await uploadSingleFile(item.file, storageMetadataRaw);
+      item.status = "success";
+    } catch (error) {
+      item.status = "error";
+      item.error = error.message || "Upload failed.";
+      item.validationErrors = [item.error];
+    }
+    renderUploadQueue();
+  }
+
+  isUploading = false;
+  uploadSubmitBtn.disabled = false;
+  uploadSubmitBtn.textContent = "Upload";
+
+  const succeeded = uploadQueueItems.filter((i) => i.status === "success").length;
+  const failed = uploadQueueItems.filter((i) => i.status === "error").length;
+  const total = uploadQueueItems.length;
+
+  if (failed === 0 && succeeded > 0) {
+    showToast(`All ${succeeded} file${succeeded > 1 ? "s" : ""} uploaded successfully.`);
+  } else if (succeeded > 0) {
+    showToast(`${succeeded}/${total} uploaded. ${failed} failed — check errors below.`);
+  } else if (failed > 0) {
+    showToast(`All ${failed} file${failed > 1 ? "s" : ""} failed. Check errors below.`);
+  }
+
+  uploadForm.reset();
+  if (dropZoneText) {
+    dropZoneText.textContent = defaultDropText;
+    dropZone.classList.remove("has-file");
+  }
+  await refreshFilesystem({ force: true });
+}
+
+function removeQueueItem(itemId) {
+  uploadQueueItems = uploadQueueItems.filter((i) => i.id !== itemId);
+  if (uploadQueueItems.length === 0) uploadQueue.hidden = true;
+  renderUploadQueue();
+}
+
+function clearUploadQueue() {
+  // Only clear completed/errored items, keep in-progress
+  if (isUploading) {
+    uploadQueueItems = uploadQueueItems.filter((i) => i.status === "uploading");
+  } else {
+    uploadQueueItems = [];
+    uploadQueue.hidden = true;
+  }
+  renderUploadQueue();
+}
+
+function renderUploadQueue() {
+  if (!uploadQueueItems.length) {
+    uploadQueue.hidden = true;
+    return;
+  }
+
+  const succeeded = uploadQueueItems.filter((i) => i.status === "success").length;
+  const failed = uploadQueueItems.filter((i) => i.status === "error").length;
+  const pending = uploadQueueItems.filter((i) => ["pending", "validating", "ready"].includes(i.status)).length;
+  const uploading = uploadQueueItems.filter((i) => i.status === "uploading").length;
+
+  const parts = [];
+  if (uploading) parts.push(`${uploading} uploading`);
+  if (pending) parts.push(`${pending} ready`);
+  if (succeeded) parts.push(`${succeeded} done`);
+  if (failed) parts.push(`${failed} failed`);
+  uploadQueueSummary.textContent = parts.join(" \u00b7 ");
+
+  const hasUploadable = uploadQueueItems.some((i) => i.status === "ready");
+  uploadSubmitBtn.disabled = isUploading || !hasUploadable;
+
+  uploadQueueList.innerHTML = uploadQueueItems
+    .map((item) => {
+      const statusIcon = {
+        pending: "\u23f3",
+        validating: "\u23f3",
+        ready: "\u2705",
+        uploading: "\u25b6",
+        success: "\u2714",
+        error: "\u2718",
+      }[item.status] || "?";
+
+      const statusClass = `uq-item--${item.status}`;
+      const sizeStr = formatBytes(item.file.size);
+
+      let errorsHtml = "";
+      if (item.validationErrors && item.validationErrors.length > 0) {
+        errorsHtml = `<div class="uq-item__errors">${item.validationErrors.map((e) => `<div class="uq-item__error">${escapeHtml(e)}</div>`).join("")}</div>`;
+      }
+
+      return `<div class="uq-item ${statusClass}" data-uq-id="${item.id}">
+        <div class="uq-item__row">
+          <span class="uq-item__icon">${statusIcon}</span>
+          <span class="uq-item__name" title="${escapeHtml(item.file.name)}">${escapeHtml(item.file.name)}</span>
+          <span class="uq-item__size">${sizeStr}</span>
+          <span class="uq-item__status">${item.status}</span>
+          <button type="button" class="uq-item__remove" data-uq-remove="${item.id}" title="Remove">&times;</button>
+        </div>
+        ${errorsHtml}
+      </div>`;
+    })
+    .join("");
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 async function createFolder(path) {
@@ -617,6 +825,36 @@ function showToast(message) {
   showToast._timer = setTimeout(() => { uploadResult.textContent = ""; }, 6000);
 }
 
+function getDraggedFileId(dataTransfer) {
+  if (draggingFileId) return draggingFileId;
+  if (!dataTransfer) return "";
+  return dataTransfer.getData("application/x-file-id") || dataTransfer.getData("text/plain") || "";
+}
+
+function hasDraggedFile(dataTransfer) {
+  if (draggingFileId) return true;
+  if (!dataTransfer) return false;
+  const types = Array.from(dataTransfer.types || []);
+  if (types.includes("application/x-folder-path")) return false;
+  return types.includes("application/x-file-id");
+}
+
+function addFileToSmokeContext(fileId) {
+  if (!fileId) return;
+  const file = getFileById(fileId);
+  if (!file) {
+    showToast("File not found.");
+    return;
+  }
+
+  const alreadyInContext = selectedContextFileIds.has(fileId);
+  selectedContextFileIds.add(fileId);
+  renderContextInfo();
+  renderFileList();
+  renderLoadedFiles();
+  showToast(alreadyInContext ? "File already in Smoke context." : "File loaded into Smoke context.");
+}
+
 // ═══════════════════════════════════════════════════════════════
 // INLINE RENAME
 // ═══════════════════════════════════════════════════════════════
@@ -816,31 +1054,33 @@ sidebarBtns.forEach((btn) => {
   });
 });
 
+// ── Show selected filenames before upload ──
+const dropZoneText = dropZone?.querySelector(".paste-zone__text");
+const defaultDropText = dropZoneText?.textContent || "";
+
 // ── Upload ──
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const file = fileInput.files?.[0];
-  if (!file) {
-    showToast("Choose a file before uploading.");
+
+  // If queue has ready items, process them
+  const hasReady = uploadQueueItems.some((i) => i.status === "ready");
+  if (hasReady) {
+    // Validate storage metadata JSON before uploading
+    if (storageMetadataInput.value.trim() !== "") {
+      try { JSON.parse(storageMetadataInput.value); }
+      catch { showToast("Invalid storage metadata JSON."); return; }
+    }
+    await processUploadQueue();
     return;
   }
 
-  showToast("Uploading...");
-  try {
-    if (storageMetadataInput.value.trim() !== "") {
-      JSON.parse(storageMetadataInput.value);
-    }
-    const uploaded = await uploadFile(file, storageMetadataInput.value);
-    showToast(`Uploaded ${uploaded.original_filename} to ${displayFolderPath(uploaded.folder_path)}. Status: pending`);
-    uploadForm.reset();
-    if (dropZoneText) {
-      dropZoneText.textContent = defaultDropText;
-      dropZone.classList.remove("has-file");
-    }
-    await refreshFilesystem({ force: true });
-  } catch (error) {
-    showToast(toErrorMessage(error, "Upload failed."));
+  // Otherwise, add files from input to queue
+  const files = fileInput.files;
+  if (!files || files.length === 0) {
+    showToast("Choose files before uploading.");
+    return;
   }
+  addFilesToQueue(files);
 });
 
 // ── Drop zone visual feedback ──
@@ -860,21 +1100,31 @@ if (dropZone) {
     e.preventDefault();
     const files = e.dataTransfer?.files;
     if (files?.length) {
-      fileInput.files = files;
-      uploadForm.requestSubmit();
+      addFilesToQueue(files);
     }
   });
 }
 
-// ── Show selected filename before upload ──
-const dropZoneText = dropZone?.querySelector(".paste-zone__text");
-const defaultDropText = dropZoneText?.textContent || "";
 fileInput.addEventListener("change", () => {
-  const file = fileInput.files?.[0];
-  if (file && dropZoneText) {
-    dropZoneText.textContent = file.name;
+  const files = fileInput.files;
+  if (!files || files.length === 0) return;
+  if (files.length === 1 && dropZoneText) {
+    dropZoneText.textContent = files[0].name;
+    dropZone.classList.add("has-file");
+  } else if (dropZoneText) {
+    dropZoneText.textContent = `${files.length} files selected`;
     dropZone.classList.add("has-file");
   }
+  addFilesToQueue(files);
+  // Reset input so re-selecting same files triggers change
+  fileInput.value = "";
+});
+
+// ── Upload queue interactions ──
+uploadQueueClear.addEventListener("click", clearUploadQueue);
+uploadQueueList.addEventListener("click", (e) => {
+  const removeBtn = e.target.closest("[data-uq-remove]");
+  if (removeBtn) removeQueueItem(removeBtn.dataset.uqRemove);
 });
 
 // ── Create folder ──
@@ -995,8 +1245,11 @@ fileListEl.addEventListener("dragstart", (event) => {
   if (!(target instanceof Element)) return;
   const row = target.closest(".file-row[data-file-id]");
   if (!row || !event.dataTransfer) return;
-  event.dataTransfer.setData("text/plain", row.dataset.fileId);
-  event.dataTransfer.effectAllowed = "move";
+  const fileId = row.dataset.fileId || "";
+  draggingFileId = fileId;
+  event.dataTransfer.setData("application/x-file-id", fileId);
+  event.dataTransfer.setData("text/plain", fileId);
+  event.dataTransfer.effectAllowed = "copyMove";
 });
 
 folderTree.addEventListener("dragstart", (event) => {
@@ -1006,6 +1259,7 @@ folderTree.addEventListener("dragstart", (event) => {
   if (!row || !event.dataTransfer) return;
   const folderPath = row.dataset.folderPath;
   if (!folderPath) return;
+  draggingFileId = "";
   event.dataTransfer.setData("application/x-folder-path", folderPath);
   event.dataTransfer.effectAllowed = "move";
 });
@@ -1065,7 +1319,7 @@ folderTree.addEventListener("drop", async (event) => {
   }
 
   // Otherwise handle file drop
-  const fileId = event.dataTransfer.getData("text/plain");
+  const fileId = getDraggedFileId(event.dataTransfer);
   if (!fileId) return;
 
   try {
@@ -1075,6 +1329,76 @@ folderTree.addEventListener("drop", async (event) => {
   } catch (error) {
     showToast(toErrorMessage(error, "Failed to move file."));
   }
+});
+
+function clearContextDropHighlight() {
+  loadedFilesList.classList.remove("drop-over");
+}
+
+function clearChatDropHighlight() {
+  panelChat.classList.remove("drop-over");
+}
+
+function handleSmokeContextDrop(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  clearContextDropHighlight();
+  clearChatDropHighlight();
+  if (!hasDraggedFile(event.dataTransfer)) return;
+
+  const fileId = getDraggedFileId(event.dataTransfer);
+  if (!fileId) {
+    showToast("Could not read dragged file.");
+    return;
+  }
+
+  addFileToSmokeContext(fileId);
+}
+
+panelChat.addEventListener("dragover", (event) => {
+  if (!hasDraggedFile(event.dataTransfer)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  panelChat.classList.add("drop-over");
+});
+
+panelChat.addEventListener("dragleave", (event) => {
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  const related = event.relatedTarget;
+  if (related instanceof Node && panelChat.contains(related)) return;
+  clearChatDropHighlight();
+});
+
+panelChat.addEventListener("drop", (event) => {
+  handleSmokeContextDrop(event);
+});
+
+loadedFilesList.addEventListener("dragover", (event) => {
+  if (!hasDraggedFile(event.dataTransfer)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  loadedFilesList.classList.add("drop-over");
+  panelChat.classList.add("drop-over");
+});
+
+loadedFilesList.addEventListener("dragleave", (event) => {
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  const related = event.relatedTarget;
+  if (related instanceof Node && loadedFilesList.contains(related)) return;
+  clearContextDropHighlight();
+});
+
+loadedFilesList.addEventListener("drop", (event) => {
+  handleSmokeContextDrop(event);
+});
+
+document.addEventListener("dragend", () => {
+  clearFolderDropHighlight();
+  clearContextDropHighlight();
+  clearChatDropHighlight();
+  draggingFileId = "";
 });
 
 // ── Double-click to rename (files and folders) ──
