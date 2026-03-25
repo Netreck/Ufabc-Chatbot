@@ -1,101 +1,153 @@
-# RAG File Preparation Guide
+# RAG File Preparation Guide (Agentic Ready)
 
-Este documento define o padrao para armazenamento e organizacao de arquivos antes da etapa de vetorizacao (embeddings) no pipeline de RAG.
+Este documento define o padrão para criação, estruturação e armazenamento de arquivos antes da etapa de vetorização (embeddings) em pipelines de **RAG e Agentic RAG**.
 
-Objetivos:
-- dados semanticamente claros
-- dados consistentes
-- dados versionaveis
-- chunking eficiente no pipeline
-- uso por agentes (Agentic RAG)
+---
 
-## Principios Fundamentais
+## Objetivos
 
-### 1. Documento != Chunk
+- Maximizar compreensão semântica
+- Melhorar recuperação contextual (retrieval)
+- Facilitar reasoning por agentes
+- Garantir consistência e versionamento
+- Otimizar chunking automático
+- Permitir composição de respostas multi-documento
 
-- Documento e a unidade semantica completa.
-- Chunk e a unidade de busca gerada no pipeline.
+---
 
-Nao dividir documentos manualmente em chunks. Manter documentos completos e estruturados.
+## Princípios Fundamentais
 
-### 2. Um Documento = Um Assunto
+### 1. Documento ≠ Chunk
 
-Cada arquivo deve responder uma pergunta clara ou cobrir um unico tema.
+- **Documento**: unidade semântica completa e autocontida  
+- **Chunk**: unidade técnica gerada no pipeline  
 
-Correto:
-- `regulamento-matricula.md`
-- `fluxo-trancamento.md`
+👉 Nunca criar chunks manualmente  
+👉 Sempre estruturar documentos de forma lógica e navegável  
 
-Incorreto:
-- `documentacao-geral.md` com varios assuntos misturados.
+---
 
-### 3. Markdown como formato padrao
+### 2. Um Documento = Uma Intenção Clara
 
-Usar `.md` como formato principal.
+Cada documento deve responder:
+
+> “Qual pergunta este documento resolve?”
+
+**Exemplos corretos:**
+- `como-funciona-matricula.md`
+- `regras-trancamento-curso.md`
+
+**Incorreto:**
+- `tudo-sobre-universidade.md`
+
+---
+
+### 3. Pensar em "Agent Readability"
+
+Documentos devem ser compreensíveis para:
+- LLMs
+- agentes autônomos
+- pipelines de reasoning
+
+👉 Evitar:
+- ambiguidade
+- contexto implícito
+- dependência de outros arquivos
+
+👉 Priorizar:
+- clareza
+- redundância útil
+- contexto explícito
+
+---
+
+### 4. Markdown como formato padrão
+
+Formato principal: `.md`
 
 Opcional:
-- `.json` ou `.yaml` para metadados adicionais externos
+- `.json` / `.yaml` (metadados externos)
 
-Evitar enviar diretamente:
+Evitar ingestão direta de:
 - PDF
 - DOCX
 - XLSX
 
-Esses formatos devem ser convertidos para Markdown antes do upload.
+👉 Sempre converter antes
 
-## Estrutura Obrigatoria
+---
 
-Todos os documentos devem seguir este padrao:
+## Estrutura Obrigatória (Agentic Format)
 
 ```md
 ---
 id: regulamento-ufabc-2026
+
 titulo: Regulamento Geral UFABC
+resumo: Define regras gerais de matrícula, avaliação e funcionamento acadêmico da UFABC.
+
 tipo: regulamento
 dominio: academico
 subdominio: matricula
-versao: 1
+
+intencao: explicar_regras_academicas
+publico_alvo: estudantes
+
+versao: 2
 status: ativo
+
+idioma: pt-BR
+
 tags:
   - ufabc
   - matricula
   - regulamento
+
+palavras_chave:
+  - matrícula
+  - trancamento
+  - avaliação
+
 fonte: documento_oficial
+autor: ufabc
+confiabilidade: alta
+
+relacionados:
+  - fluxo-matricula
+  - prazos-academicos
+
 atualizado_em: 2026-03-22
+criado_em: 2026-01-10
 ---
 
 # Regulamento Geral UFABC
 
-## Sumario
-1. Disposicoes gerais
-2. Matricula
-3. Avaliacao
+## Resumo Executivo
+Este documento apresenta as regras gerais da UFABC sobre matrícula, avaliação e estrutura acadêmica.
 
-## 1. Disposicoes gerais
+## Quando usar este documento
+Use este documento quando precisar entender regras oficiais da universidade relacionadas à vida acadêmica.
+
+## Quando NÃO usar este documento
+Não usar para:
+- procedimentos operacionais detalhados (ver documentos de fluxo)
+- calendários (ver prazos-academicos)
+
+---
+
+## Sumário
+1. Disposições gerais
+2. Matrícula
+3. Avaliação
+
+---
+
+## 1. Disposições gerais
 ...
 
-## 2. Matricula
+## 2. Matrícula
 ...
 
-## 3. Avaliacao
+## 3. Avaliação
 ...
-```
 
-## Metadados para Seaweed
-
-Se o Seaweed estiver em uso, enviar `storage_metadata` no upload como JSON (`multipart/form-data`).
-
-Exemplo:
-
-```json
-{
-  "seaweed_collection": "ufabc-rag",
-  "seaweed_replication": "001"
-}
-```
-
-O backend combina:
-- metadados obrigatorios extraidos do front matter
-- metadados adicionais enviados em `storage_metadata`
-
-Assim o sistema externo pode usar metadados nativos do Seaweed sem perder o padrao semantico dos documentos.

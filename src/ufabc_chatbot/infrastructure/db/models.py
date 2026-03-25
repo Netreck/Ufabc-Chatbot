@@ -9,6 +9,8 @@ class Base(DeclarativeBase):
     pass
 
 
+
+#SQL for control.
 class FileFeedItemORM(Base):
     __tablename__ = "file_feed_items"
 
