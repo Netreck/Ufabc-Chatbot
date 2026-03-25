@@ -177,21 +177,23 @@
             <h2 class="modal__title" id="modal-title">File Preview</h2>
             <p class="modal__subtitle" id="preview-file"></p>
           </div>
-          <button class="modal__close" id="close-preview-btn" type="button" title="Close preview">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <div class="modal__header-actions">
+            <button class="btn btn--ghost btn--xs" id="edit-preview-btn" type="button">Edit</button>
+            <button class="btn btn--primary btn--xs" id="save-preview-btn" type="button" hidden>Save</button>
+            <button class="btn btn--ghost btn--xs" id="cancel-edit-btn" type="button" hidden>Cancel</button>
+            <button class="modal__close" id="close-preview-btn" type="button" title="Close preview">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="modal__body">
           <div class="modal__section">
-            <h3 class="modal__section-title">Metadata</h3>
-            <pre id="preview-metadata" class="code-block">-</pre>
-          </div>
-          <div class="modal__section">
             <h3 class="modal__section-title">Content Preview</h3>
             <iframe id="preview-iframe" class="preview-frame" title="Document Preview"></iframe>
+            <textarea id="preview-editor" class="preview-editor" hidden spellcheck="false"></textarea>
           </div>
         </div>
       </div>

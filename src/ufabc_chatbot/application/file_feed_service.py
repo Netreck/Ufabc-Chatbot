@@ -127,6 +127,13 @@ class FileFeedService:
         record, content = await self.download(file_id)
         return record, content.decode("utf-8", errors="replace")
 
+    async def update_content(self, file_id: UUID, markdown_text: str) -> FileFeedRecord:
+        record = await self._repository.get(file_id)
+        if record is None:
+            raise FileNotFoundError("Feed file record not found.")
+        await self._storage.save(record.stored_filename, markdown_text.encode("utf-8"))
+        return record
+
     async def delete(self, file_id: UUID) -> FileFeedRecord | None:
         record = await self._repository.get(file_id)
         if record is None:

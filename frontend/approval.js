@@ -18,9 +18,12 @@ const pageNext = document.getElementById("page-next");
 const pageInfo = document.getElementById("page-info");
 const previewModal = document.getElementById("preview-modal");
 const previewFileLabel = document.getElementById("preview-file");
-const previewMetadata = document.getElementById("preview-metadata");
 const previewIframe = document.getElementById("preview-iframe");
+const previewEditor = document.getElementById("preview-editor");
 const closePreviewBtn = document.getElementById("close-preview-btn");
+const editPreviewBtn = document.getElementById("edit-preview-btn");
+const savePreviewBtn = document.getElementById("save-preview-btn");
+const cancelEditBtn = document.getElementById("cancel-edit-btn");
 const modalTitle = document.getElementById("modal-title");
 const bulkBar = document.getElementById("bulk-bar");
 const bulkCount = document.getElementById("bulk-count");
@@ -49,6 +52,8 @@ let pollingTimer = null;
 const POLL_INTERVAL = 5000;
 let lastTreeHash = "";
 let selectedIds = new Set();
+let previewedFileId = null;
+let previewMarkdownText = "";
 
 // ── SVG Icons ──
 const ICON_DOWNLOAD = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
@@ -221,28 +226,77 @@ function render() {
 // ═══════════════════════════════════════════════════════════════
 
 function openPreview(file) {
+  previewedFileId = file.id;
+  previewMarkdownText = file.markdown_text || "";
   modalTitle.textContent = file.original_filename;
   previewFileLabel.textContent = `ID: ${file.id}`;
-  previewMetadata.textContent = JSON.stringify(
-    {
-      document_metadata: file.document_metadata,
-      storage_metadata: file.storage_metadata,
-      status: file.status,
-    },
-    null,
-    2,
-  );
+  exitEditMode();
   previewIframe.removeAttribute("srcdoc");
-  previewIframe.src = `${apiBase}/files/feed/${file.id}/preview/frame`;
+  previewIframe.src = previewFrameUrl(file.id);
   previewModal.hidden = false;
   document.body.style.overflow = "hidden";
 }
 
 function closePreview() {
+  exitEditMode();
+  previewedFileId = null;
+  previewMarkdownText = "";
   previewModal.hidden = true;
   previewIframe.removeAttribute("src");
   previewIframe.removeAttribute("srcdoc");
   document.body.style.overflow = "";
+}
+
+function previewFrameUrl(fileId) {
+  const theme = document.documentElement.getAttribute("data-theme") || "dark";
+  return `${apiBase}/files/feed/${fileId}/preview/frame?theme=${theme}`;
+}
+
+function enterEditMode() {
+  previewEditor.value = previewMarkdownText;
+  previewIframe.hidden = true;
+  previewEditor.hidden = false;
+  editPreviewBtn.hidden = true;
+  savePreviewBtn.hidden = false;
+  cancelEditBtn.hidden = false;
+}
+
+function exitEditMode() {
+  previewIframe.hidden = false;
+  previewEditor.hidden = true;
+  editPreviewBtn.hidden = false;
+  savePreviewBtn.hidden = true;
+  cancelEditBtn.hidden = true;
+}
+
+async function saveFileContent() {
+  const text = previewEditor.value;
+  savePreviewBtn.disabled = true;
+  savePreviewBtn.textContent = "Saving…";
+  try {
+    await updateFileContent(previewedFileId, text);
+    previewMarkdownText = text;
+    previewIframe.removeAttribute("srcdoc");
+    previewIframe.src = previewFrameUrl(previewedFileId);
+    exitEditMode();
+  } catch (error) {
+    alert(error.message || "Failed to save file.");
+  } finally {
+    savePreviewBtn.disabled = false;
+    savePreviewBtn.textContent = "Save";
+  }
+}
+
+async function updateFileContent(fileId, markdownText) {
+  const response = await fetch(`${apiBase}/files/feed/${fileId}/content`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown_text: markdownText }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.detail || "Failed to save file content.");
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -459,6 +513,9 @@ tbody.addEventListener("click", async (event) => {
 
 // Preview modal
 closePreviewBtn.addEventListener("click", closePreview);
+editPreviewBtn.addEventListener("click", enterEditMode);
+savePreviewBtn.addEventListener("click", saveFileContent);
+cancelEditBtn.addEventListener("click", exitEditMode);
 previewModal.addEventListener("click", (event) => {
   if (event.target === previewModal) closePreview();
 });

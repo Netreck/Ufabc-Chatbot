@@ -28,9 +28,12 @@ const clearChatContextBtn = document.getElementById("clear-chat-context-btn");
 const loadedFilesList = document.getElementById("loaded-files-list");
 const previewModal = document.getElementById("preview-modal");
 const previewFileLabel = document.getElementById("preview-file");
-const previewMetadata = document.getElementById("preview-metadata");
 const previewIframe = document.getElementById("preview-iframe");
+const previewEditor = document.getElementById("preview-editor");
 const closePreviewBtn = document.getElementById("close-preview-btn");
+const editPreviewBtn = document.getElementById("edit-preview-btn");
+const savePreviewBtn = document.getElementById("save-preview-btn");
+const cancelEditBtn = document.getElementById("cancel-edit-btn");
 const modalTitle = document.getElementById("modal-title");
 const liveIndicator = document.getElementById("live-indicator");
 const dropZone = document.getElementById("drop-zone");
@@ -60,6 +63,7 @@ const ICON_CHEVRON = '<svg class="chevron-icon" width="10" height="10" viewBox="
 let filesystem = { folders: [], files: [] };
 let currentFolderPath = "";
 let previewedFileId = null;
+let previewMarkdownText = "";
 const selectedContextFileIds = new Set();
 let pollingTimer = null;
 const POLL_INTERVAL = 5000;
@@ -204,30 +208,66 @@ function renderLoadedFiles() {
 // ── Preview Modal ──
 function openPreview(preview) {
   previewedFileId = preview.id;
+  previewMarkdownText = preview.markdown_text || "";
   modalTitle.textContent = preview.original_filename;
   previewFileLabel.textContent = `ID: ${preview.id}`;
-  previewMetadata.textContent = JSON.stringify(
-    {
-      document_metadata: preview.document_metadata,
-      storage_metadata: preview.storage_metadata,
-      status: preview.status,
-    },
-    null,
-    2,
-  );
+  exitEditMode();
   // srcdoc takes precedence over src — must remove it before setting src
   previewIframe.removeAttribute("srcdoc");
-  previewIframe.src = `${apiBase}/files/feed/${preview.id}/preview/frame`;
+  previewIframe.src = previewFrameUrl(preview.id);
   previewModal.hidden = false;
   document.body.style.overflow = "hidden";
 }
 
 function closePreview() {
+  exitEditMode();
   previewedFileId = null;
+  previewMarkdownText = "";
   previewModal.hidden = true;
   previewIframe.removeAttribute("src");
   previewIframe.removeAttribute("srcdoc");
   document.body.style.overflow = "";
+}
+
+function previewFrameUrl(fileId) {
+  const theme = document.documentElement.getAttribute("data-theme") || "dark";
+  return `${apiBase}/files/feed/${fileId}/preview/frame?theme=${theme}`;
+}
+
+function enterEditMode() {
+  previewEditor.value = previewMarkdownText;
+  previewIframe.hidden = true;
+  previewEditor.hidden = false;
+  editPreviewBtn.hidden = true;
+  savePreviewBtn.hidden = false;
+  cancelEditBtn.hidden = false;
+}
+
+function exitEditMode() {
+  previewIframe.hidden = false;
+  previewEditor.hidden = true;
+  editPreviewBtn.hidden = false;
+  savePreviewBtn.hidden = true;
+  cancelEditBtn.hidden = true;
+}
+
+async function saveFileContent() {
+  const text = previewEditor.value;
+  savePreviewBtn.disabled = true;
+  savePreviewBtn.textContent = "Saving…";
+  try {
+    await updateFileContent(previewedFileId, text);
+    previewMarkdownText = text;
+    previewIframe.removeAttribute("srcdoc");
+    previewIframe.src = previewFrameUrl(previewedFileId);
+    exitEditMode();
+    showToast("File saved.");
+  } catch (error) {
+    showToast(toErrorMessage(error, "Failed to save file."));
+  } finally {
+    savePreviewBtn.disabled = false;
+    savePreviewBtn.textContent = "Save";
+  }
 }
 
 // ── Folder Tree ──
@@ -663,6 +703,18 @@ async function fetchPreview(fileId) {
     throw new Error(payload.detail || "Failed to load file preview.");
   }
   return response.json();
+}
+
+async function updateFileContent(fileId, markdownText) {
+  const response = await fetch(`${apiBase}/files/feed/${fileId}/content`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown_text: markdownText }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.detail || "Failed to save file content.");
+  }
 }
 
 async function deleteFeedFile(fileId) {
@@ -1158,6 +1210,9 @@ refreshBtn.addEventListener("click", async () => {
 
 // ── Preview modal ──
 closePreviewBtn.addEventListener("click", closePreview);
+editPreviewBtn.addEventListener("click", enterEditMode);
+savePreviewBtn.addEventListener("click", saveFileContent);
+cancelEditBtn.addEventListener("click", exitEditMode);
 previewModal.addEventListener("click", (event) => {
   if (event.target === previewModal) closePreview();
 });

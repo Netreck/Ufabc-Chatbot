@@ -57,6 +57,10 @@ class MoveFolderRequest(BaseModel):
     target_parent_path: str = Field(default="", max_length=255)
 
 
+class UpdateFileFeedContentRequest(BaseModel):
+    markdown_text: str
+
+
 class FileTreeFolderResponse(BaseModel):
     path: str
     name: str

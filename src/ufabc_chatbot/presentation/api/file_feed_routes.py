@@ -35,6 +35,7 @@ from ufabc_chatbot.presentation.api.file_feed_schemas import (
     MoveFolderRequest,
     RenameFeedFileRequest,
     RenameFolderRequest,
+    UpdateFileFeedContentRequest,
     UpdateFileFeedStatusRequest,
     ValidateFileResult,
 )
@@ -389,6 +390,7 @@ async def preview_feed_file(
 @router.get("/files/feed/{file_id}/preview/frame", response_class=HTMLResponse)
 async def preview_feed_file_frame(
     file_id: UUID,
+    theme: str = Query(default="dark"),
     service: FileFeedService = Depends(get_file_feed_service),
 ) -> HTMLResponse:
     try:
@@ -407,6 +409,19 @@ async def preview_feed_file_frame(
         indent=2,
     )
 
+    if theme == "light":
+        bg = "#f4f7f6"
+        fg = "#1a1a1a"
+        card_bg = "rgba(0,0,0,0.03)"
+        card_border = "rgba(0,0,0,0.12)"
+        heading_color = "#b37300"
+    else:
+        bg = "#081a1d"
+        fg = "#f6fbfa"
+        card_bg = "rgba(255,255,255,0.03)"
+        card_border = "rgba(255,255,255,0.2)"
+        heading_color = "#ffb36d"
+
     html = f"""<!doctype html>
 <html lang="en">
   <head>
@@ -416,8 +431,8 @@ async def preview_feed_file_frame(
     <style>
       body {{
         margin: 0;
-        background: #081a1d;
-        color: #f6fbfa;
+        background: {bg};
+        color: {fg};
         font-family: "IBM Plex Mono", "Courier New", monospace;
       }}
       .wrapper {{
@@ -426,15 +441,15 @@ async def preview_feed_file_frame(
         gap: 12px;
       }}
       .card {{
-        border: 1px solid rgba(255,255,255,0.2);
+        border: 1px solid {card_border};
         border-radius: 10px;
         padding: 10px;
-        background: rgba(255,255,255,0.03);
+        background: {card_bg};
       }}
       h2 {{
         margin: 0 0 8px;
         font-size: 14px;
-        color: #ffb36d;
+        color: {heading_color};
       }}
       pre {{
         margin: 0;
@@ -464,6 +479,20 @@ async def preview_feed_file_frame(
 </html>
 """
     return HTMLResponse(content=html)
+
+
+@router.patch("/files/feed/{file_id}/content", status_code=status.HTTP_204_NO_CONTENT)
+async def update_feed_file_content(
+    file_id: UUID,
+    payload: UpdateFileFeedContentRequest,
+    service: FileFeedService = Depends(get_file_feed_service),
+) -> Response:
+    try:
+        await service.update_content(file_id, payload.markdown_text)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/files/feed/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
