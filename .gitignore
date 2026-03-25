@@ -1,7 +1,5 @@
-# Python bytecode and build artifacts
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 *.egg
 *.egg-info/
@@ -39,7 +37,7 @@ frontend/.vite/
 .env
 .env.*
 !.env.example
-
+design.md
 # IDE/OS files
 .DS_Store
 Thumbs.db
