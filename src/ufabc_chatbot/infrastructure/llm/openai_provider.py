@@ -1,30 +1,29 @@
 from typing import Sequence
 
-from openai import AsyncOpenAI
+try:
+    from openai import AsyncOpenAI
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in local smoke runs
+    AsyncOpenAI = None  # type: ignore[assignment]
 
 from ufabc_chatbot.core.config import Settings
 from ufabc_chatbot.domain.models import ChatMessage
 
 
 class OpenAIProvider:
-    """LLM provider backed by OpenAI with local stub fallback."""
+    """LLM provider backed by OpenAI."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._client: AsyncOpenAI | None = None
-        if settings.openai_api_key:
+        if settings.openai_api_key and AsyncOpenAI is not None:
             self._client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def generate(self, messages: Sequence[ChatMessage]) -> str:
-        last_user_message = next(
-            (message.content for message in reversed(messages) if message.role == "user"),
-            "",
-        )
-
         if self._client is None:
-            if last_user_message:
-                return f"[smoketest/local-stub] {last_user_message}"
-            return "[smoketest/local-stub] ready"
+            return (
+                "[openai-not-configured] Defina OPENAI_API_KEY e instale o pacote "
+                "`openai` para habilitar respostas via API."
+            )
 
         try:
             response = await self._client.chat.completions.create(
