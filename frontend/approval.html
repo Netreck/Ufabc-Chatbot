@@ -103,6 +103,7 @@
             <table class="approval-table">
               <thead>
                 <tr>
+                  <th class="col-check"></th>
                   <th class="col-name">Filename</th>
                   <th class="col-folder">Folder</th>
                   <th class="col-status">Status</th>
@@ -117,6 +118,25 @@
             </table>
             <div class="approval-empty" id="approval-empty" hidden>
               No files match your filters.
+            </div>
+          </div>
+
+          <!-- Bulk Actions Bar -->
+          <div class="bulk-bar" id="bulk-bar" hidden>
+            <div class="bulk-bar__left">
+              <span class="bulk-bar__count" id="bulk-count">0 selected</span>
+            </div>
+            <div class="bulk-bar__actions">
+              <button class="btn btn--primary btn--sm" id="bulk-approve-btn" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span>Approve Selected</span>
+              </button>
+              <button class="btn btn--danger btn--sm" id="bulk-delete-btn" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Delete Selected</span>
+              </button>
+              <button class="btn btn--ghost btn--sm" id="bulk-select-all-btn" type="button">Select All</button>
+              <button class="btn btn--ghost btn--sm" id="bulk-clear-btn" type="button">Clear Selection</button>
             </div>
           </div>
 
@@ -154,6 +174,35 @@
             <h3 class="modal__section-title">Content Preview</h3>
             <iframe id="preview-iframe" class="preview-frame" title="Document Preview"></iframe>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ BULK CONFIRM MODAL ═══ -->
+    <div class="modal-overlay" id="bulk-confirm-modal" hidden>
+      <div class="modal bulk-confirm" role="dialog" aria-label="Confirm Bulk Action">
+        <div class="bulk-confirm__header" id="bulk-confirm-header">
+          <div class="bulk-confirm__icon" id="bulk-confirm-icon"></div>
+          <h2 class="bulk-confirm__title" id="bulk-confirm-title">Confirm Action</h2>
+          <p class="bulk-confirm__subtitle" id="bulk-confirm-subtitle"></p>
+        </div>
+        <div class="bulk-confirm__body">
+          <div class="bulk-confirm__list-wrap">
+            <table class="bulk-confirm__table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Folder</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="bulk-confirm-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bulk-confirm__footer">
+          <button class="btn btn--ghost btn--sm" id="bulk-confirm-cancel" type="button">Cancel</button>
+          <button class="btn btn--sm" id="bulk-confirm-proceed" type="button">Confirm</button>
         </div>
       </div>
     </div>

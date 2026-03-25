@@ -22,6 +22,20 @@ const previewMetadata = document.getElementById("preview-metadata");
 const previewIframe = document.getElementById("preview-iframe");
 const closePreviewBtn = document.getElementById("close-preview-btn");
 const modalTitle = document.getElementById("modal-title");
+const bulkBar = document.getElementById("bulk-bar");
+const bulkCount = document.getElementById("bulk-count");
+const bulkApproveBtn = document.getElementById("bulk-approve-btn");
+const bulkDeleteBtn = document.getElementById("bulk-delete-btn");
+const bulkSelectAllBtn = document.getElementById("bulk-select-all-btn");
+const bulkClearBtn = document.getElementById("bulk-clear-btn");
+const bulkConfirmModal = document.getElementById("bulk-confirm-modal");
+const bulkConfirmHeader = document.getElementById("bulk-confirm-header");
+const bulkConfirmIcon = document.getElementById("bulk-confirm-icon");
+const bulkConfirmTitle = document.getElementById("bulk-confirm-title");
+const bulkConfirmSubtitle = document.getElementById("bulk-confirm-subtitle");
+const bulkConfirmTbody = document.getElementById("bulk-confirm-tbody");
+const bulkConfirmCancel = document.getElementById("bulk-confirm-cancel");
+const bulkConfirmProceed = document.getElementById("bulk-confirm-proceed");
 
 const apiBase = "/api/v1";
 const PAGE_SIZE = 20;
@@ -34,6 +48,7 @@ let currentPage = 1;
 let pollingTimer = null;
 const POLL_INTERVAL = 5000;
 let lastTreeHash = "";
+let selectedIds = new Set();
 
 // ── SVG Icons ──
 const ICON_DOWNLOAD = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
@@ -130,6 +145,12 @@ function render() {
   // Stats
   statsLabel.textContent = `${filtered.length} file${filtered.length !== 1 ? "s" : ""}`;
 
+  // Clean up stale selections (files no longer in the data)
+  const allFileIds = new Set(allFiles.map((f) => f.id));
+  for (const id of selectedIds) {
+    if (!allFileIds.has(id)) selectedIds.delete(id);
+  }
+
   // Empty state
   if (pageFiles.length === 0) {
     tbody.innerHTML = "";
@@ -138,11 +159,18 @@ function render() {
     emptyEl.hidden = true;
     tbody.innerHTML = pageFiles
       .map((file) => {
+        const checked = selectedIds.has(file.id) ? "checked" : "";
         const approveBtn = file.status === "indexed"
           ? `<span class="badge indexed" style="font-size: var(--text-xs);">Approved</span>`
           : `<button class="btn btn--primary btn--xs" data-action="approve" data-id="${file.id}">Approve</button>`;
 
-        return `<tr>
+        return `<tr class="${checked ? "row-selected" : ""}">
+          <td class="col-check">
+            <label class="bulk-checkbox-wrap">
+              <input type="checkbox" class="bulk-checkbox row-checkbox" data-id="${file.id}" ${checked} />
+              <span class="bulk-checkbox-visual"></span>
+            </label>
+          </td>
           <td class="col-name">
             <span class="table-filename" data-action="preview" data-id="${file.id}">${file.original_filename}</span>
           </td>
@@ -178,6 +206,9 @@ function render() {
       })
       .join("");
   }
+
+  // Update bulk bar
+  updateBulkBar();
 
   // Pagination
   pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
@@ -433,6 +464,168 @@ previewModal.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !previewModal.hidden) closePreview();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// BULK SELECTION
+// ═══════════════════════════════════════════════════════════════
+
+function updateBulkBar() {
+  const count = selectedIds.size;
+  bulkBar.hidden = count === 0;
+  bulkCount.textContent = `${count} file${count !== 1 ? "s" : ""} selected`;
+}
+
+// Select all (current filtered results)
+bulkSelectAllBtn.addEventListener("click", () => {
+  const filtered = getFilteredFiles();
+  filtered.forEach((f) => selectedIds.add(f.id));
+  render();
+});
+
+// Row checkbox delegation
+tbody.addEventListener("change", (event) => {
+  const checkbox = event.target.closest(".row-checkbox");
+  if (!checkbox) return;
+  const fileId = checkbox.dataset.id;
+  if (checkbox.checked) {
+    selectedIds.add(fileId);
+  } else {
+    selectedIds.delete(fileId);
+  }
+  render();
+});
+
+// Clear selection
+bulkClearBtn.addEventListener("click", () => {
+  selectedIds.clear();
+  render();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// BULK CONFIRM MODAL
+// ═══════════════════════════════════════════════════════════════
+
+let bulkConfirmResolver = null;
+
+function openBulkConfirm({ action, files }) {
+  const isApprove = action === "approve";
+
+  // Style the header based on action
+  bulkConfirmHeader.className = `bulk-confirm__header ${isApprove ? "bulk-confirm__header--approve" : "bulk-confirm__header--delete"}`;
+
+  // Icon
+  bulkConfirmIcon.innerHTML = isApprove
+    ? '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+    : '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+
+  bulkConfirmTitle.textContent = isApprove
+    ? `Approve ${files.length} file${files.length !== 1 ? "s" : ""}?`
+    : `Delete ${files.length} file${files.length !== 1 ? "s" : ""}?`;
+
+  bulkConfirmSubtitle.textContent = isApprove
+    ? "The following files will be marked as indexed and become available to the chatbot."
+    : "This action cannot be undone. The following files will be permanently removed.";
+
+  // Populate the file list
+  bulkConfirmTbody.innerHTML = files
+    .map((f) => `<tr>
+      <td class="bulk-confirm__file">${f.original_filename}</td>
+      <td class="bulk-confirm__folder">${displayFolderPath(f.folder_path)}</td>
+      <td><span class="badge ${f.status}">${f.status}</span></td>
+    </tr>`)
+    .join("");
+
+  // Style the proceed button
+  bulkConfirmProceed.className = isApprove
+    ? "btn btn--primary btn--sm"
+    : "btn btn--danger btn--sm";
+  bulkConfirmProceed.textContent = isApprove ? "Approve All" : "Delete All";
+
+  bulkConfirmModal.hidden = false;
+  document.body.style.overflow = "hidden";
+
+  return new Promise((resolve) => {
+    bulkConfirmResolver = resolve;
+  });
+}
+
+function closeBulkConfirm(result) {
+  bulkConfirmModal.hidden = true;
+  document.body.style.overflow = "";
+  if (bulkConfirmResolver) {
+    bulkConfirmResolver(result);
+    bulkConfirmResolver = null;
+  }
+}
+
+bulkConfirmCancel.addEventListener("click", () => closeBulkConfirm(false));
+bulkConfirmModal.addEventListener("click", (event) => {
+  if (event.target === bulkConfirmModal) closeBulkConfirm(false);
+});
+bulkConfirmProceed.addEventListener("click", () => closeBulkConfirm(true));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !bulkConfirmModal.hidden) closeBulkConfirm(false);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// BULK ACTIONS
+// ═══════════════════════════════════════════════════════════════
+
+bulkApproveBtn.addEventListener("click", async () => {
+  const files = allFiles.filter((f) => selectedIds.has(f.id));
+  if (files.length === 0) return;
+
+  const confirmed = await openBulkConfirm({ action: "approve", files });
+  if (!confirmed) return;
+
+  bulkApproveBtn.disabled = true;
+  bulkApproveBtn.querySelector("span").textContent = "Approving...";
+
+  try {
+    const results = await Promise.allSettled(
+      files.map((f) => markIndexed(f.id))
+    );
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
+      alert(`${files.length - failed.length} approved, ${failed.length} failed.`);
+    }
+    selectedIds.clear();
+    await refreshData({ force: true });
+  } catch (error) {
+    alert(error.message || "Bulk approve failed.");
+  } finally {
+    bulkApproveBtn.disabled = false;
+    bulkApproveBtn.querySelector("span").textContent = "Approve Selected";
+  }
+});
+
+bulkDeleteBtn.addEventListener("click", async () => {
+  const files = allFiles.filter((f) => selectedIds.has(f.id));
+  if (files.length === 0) return;
+
+  const confirmed = await openBulkConfirm({ action: "delete", files });
+  if (!confirmed) return;
+
+  bulkDeleteBtn.disabled = true;
+  bulkDeleteBtn.querySelector("span").textContent = "Deleting...";
+
+  try {
+    const results = await Promise.allSettled(
+      files.map((f) => deleteFeedFile(f.id))
+    );
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
+      alert(`${files.length - failed.length} deleted, ${failed.length} failed.`);
+    }
+    selectedIds.clear();
+    await refreshData({ force: true });
+  } catch (error) {
+    alert(error.message || "Bulk delete failed.");
+  } finally {
+    bulkDeleteBtn.disabled = false;
+    bulkDeleteBtn.querySelector("span").textContent = "Delete Selected";
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════
