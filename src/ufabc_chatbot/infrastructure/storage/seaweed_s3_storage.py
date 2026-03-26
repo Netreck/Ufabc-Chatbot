@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import unicodedata
 from typing import Any
 
 import boto3
@@ -195,20 +196,28 @@ class SeaweedS3Storage:
             self._bucket_checked = True
 
     @staticmethod
+    def _to_ascii(value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value)
+        return normalized.encode("ascii", "ignore").decode("ascii")
+
+    @staticmethod
     def _normalize_metadata(metadata: dict[str, Any]) -> dict[str, str]:
         normalized: dict[str, str] = {}
         for key, value in metadata.items():
-            cleaned_key = re.sub(r"[^a-zA-Z0-9-]", "-", str(key).strip().lower())
+            cleaned_key = SeaweedS3Storage._to_ascii(str(key).strip().lower())
+            cleaned_key = re.sub(r"[^a-zA-Z0-9-]", "-", cleaned_key)
             cleaned_key = re.sub(r"-{2,}", "-", cleaned_key).strip("-")
             if not cleaned_key:
                 continue
 
             if isinstance(value, (str, int, float, bool)):
-                cleaned_value = str(value)
+                cleaned_value = SeaweedS3Storage._to_ascii(str(value))
             elif value is None:
                 cleaned_value = ""
             else:
-                cleaned_value = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+                cleaned_value = SeaweedS3Storage._to_ascii(
+                    json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                )
 
             normalized[cleaned_key] = cleaned_value
 

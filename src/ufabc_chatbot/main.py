@@ -6,6 +6,7 @@ from ufabc_chatbot.core.config import get_settings
 from ufabc_chatbot.core.dependencies import get_engine
 from ufabc_chatbot.infrastructure.db.bootstrap import init_database
 from ufabc_chatbot.presentation.api.file_feed_routes import router as file_feed_router
+from ufabc_chatbot.presentation.api.ingestion_routes import router as ingestion_router
 from ufabc_chatbot.presentation.api.routes import router as chat_router
 
 
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
 
     app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
     app.include_router(file_feed_router, prefix="/api/v1", tags=["file-feed"])
+    app.include_router(ingestion_router, prefix="/api/v1", tags=["ingestion"])
     return app
 
 

@@ -21,16 +21,28 @@ def test_chat_with_context_files(client: TestClient) -> None:
     markdown = """---
 id: faq-bolsas-2026
 titulo: FAQ Bolsas UFABC
+resumo: Perguntas e respostas sobre bolsas da UFABC.
 tipo: faq
 dominio: academico
 subdominio: bolsas
+intencao: explicar_bolsas
+publico_alvo: estudantes
 versao: 1
 status: ativo
+idioma: pt-BR
 tags:
   - ufabc
   - bolsas
+palavras_chave:
+  - bolsa permanencia
+  - edital
 fonte: documento_oficial
+autor: ufabc
+confiabilidade: alta
+relacionados:
+  - editais-bolsas
 atualizado_em: 2026-03-22
+criado_em: 2026-01-15
 ---
 
 # FAQ Bolsas UFABC

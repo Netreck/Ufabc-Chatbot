@@ -10,20 +10,28 @@ FileFeedStatus = Literal["pending", "processing", "indexed", "failed"]
 class RAGDocumentMetadata(BaseModel):
     id: str = Field(min_length=1, max_length=120)
     titulo: str = Field(min_length=1, max_length=255)
+    resumo: str = Field(min_length=1, max_length=1200)
     tipo: str = Field(min_length=1, max_length=120)
     dominio: str = Field(min_length=1, max_length=120)
     subdominio: str = Field(min_length=1, max_length=120)
+    intencao: str = Field(min_length=1, max_length=120)
+    publico_alvo: str = Field(min_length=1, max_length=120)
     versao: int = Field(ge=1)
     status: str = Field(min_length=1, max_length=60)
+    idioma: str = Field(min_length=2, max_length=20)
     tags: list[str] = Field(min_length=1, max_length=30)
+    palavras_chave: list[str] = Field(min_length=1, max_length=40)
     fonte: str = Field(min_length=1, max_length=120)
+    autor: str = Field(min_length=1, max_length=120)
+    confiabilidade: str = Field(min_length=1, max_length=60)
+    relacionados: list[str] = Field(default_factory=list, max_length=40)
     atualizado_em: date
+    criado_em: date
 
     model_config = ConfigDict(extra="allow")
 
-    @field_validator("atualizado_em", mode="before")
-    @classmethod
-    def validate_atualizado_em(cls, value: Any) -> date:
+    @staticmethod
+    def _parse_date_field(value: Any, field_name: str) -> date:
         if isinstance(value, date):
             return value
 
@@ -31,7 +39,7 @@ class RAGDocumentMetadata(BaseModel):
             return value.date()
 
         if not isinstance(value, str):
-            raise ValueError("atualizado_em must be a date string in YYYY-MM-DD format.")
+            raise ValueError(f"{field_name} must be a date string in YYYY-MM-DD format.")
 
         cleaned = (
             value.strip()
@@ -50,8 +58,18 @@ class RAGDocumentMetadata(BaseModel):
             return datetime.strptime(cleaned, "%d/%m/%Y").date()
         except ValueError as exc:
             raise ValueError(
-                f"atualizado_em must be YYYY-MM-DD (or DD/MM/YYYY). Received: {value!r}"
+                f"{field_name} must be YYYY-MM-DD (or DD/MM/YYYY). Received: {value!r}"
             ) from exc
+
+    @field_validator("atualizado_em", mode="before")
+    @classmethod
+    def validate_atualizado_em(cls, value: Any) -> date:
+        return cls._parse_date_field(value, "atualizado_em")
+
+    @field_validator("criado_em", mode="before")
+    @classmethod
+    def validate_criado_em(cls, value: Any) -> date:
+        return cls._parse_date_field(value, "criado_em")
 
 
 class FileFeedCreate(BaseModel):

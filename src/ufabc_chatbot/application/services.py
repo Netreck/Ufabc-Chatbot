@@ -23,7 +23,7 @@ class ChatService:
                 ChatMessage(
                     role="system",
                     content=(
-                        "Use os documentos de contexto fornecidos quando forem relevantes "
+                        "Use os documentos de contexto fornecidos quando forem relevantes. Nao invente informacoes e responda breve e objetivamente. "
                         "para responder a pergunta do usuario."
                     ),
                 )

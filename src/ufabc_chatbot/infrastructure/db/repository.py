@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete, select
@@ -136,6 +137,12 @@ class SQLAlchemyFileFeedRepository(FileFeedRepository):
 
     @staticmethod
     def _to_domain(entity: FileFeedItemORM) -> FileFeedRecord:
+        raw_metadata = (
+            entity.document_metadata if isinstance(entity.document_metadata, dict) else {}
+        )
+        normalized_metadata = SQLAlchemyFileFeedRepository._normalize_document_metadata(
+            raw_metadata
+        )
         return FileFeedRecord(
             id=UUID(entity.id),
             original_filename=entity.original_filename,
@@ -143,7 +150,95 @@ class SQLAlchemyFileFeedRepository(FileFeedRepository):
             content_type=entity.content_type,
             size_bytes=entity.size_bytes,
             status=entity.status,
-            document_metadata=entity.document_metadata,
+            document_metadata=normalized_metadata,
             storage_metadata=entity.storage_metadata,
             created_at=entity.created_at,
         )
+
+    @staticmethod
+    def _normalize_date_string(raw_value: object, fallback_iso: str) -> str:
+        if isinstance(raw_value, date):
+            return raw_value.isoformat()
+        if isinstance(raw_value, datetime):
+            return raw_value.date().isoformat()
+        if not isinstance(raw_value, str):
+            return fallback_iso
+
+        cleaned = (
+            raw_value.strip()
+            .replace("\u2011", "-")
+            .replace("\u2013", "-")
+            .replace("\u2014", "-")
+            .replace("\u2212", "-")
+        )
+        if not cleaned:
+            return fallback_iso
+
+        try:
+            return date.fromisoformat(cleaned).isoformat()
+        except ValueError:
+            pass
+
+        try:
+            return datetime.strptime(cleaned, "%d/%m/%Y").date().isoformat()
+        except ValueError:
+            return fallback_iso
+
+    @staticmethod
+    def _normalize_document_metadata(metadata: dict) -> dict:
+        today_iso = date.today().isoformat()
+
+        titulo = str(metadata.get("titulo") or "Documento UFABC").strip() or "Documento UFABC"
+        raw_versao = metadata.get("versao", 1)
+        try:
+            versao = max(1, int(float(str(raw_versao).strip().replace(",", "."))))
+        except (TypeError, ValueError):
+            versao = 1
+
+        tags = metadata.get("tags")
+        normalized_tags = []
+        if isinstance(tags, list):
+            normalized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+        if not normalized_tags:
+            normalized_tags = ["ufabc"]
+
+        palavras_chave = metadata.get("palavras_chave")
+        normalized_keywords = []
+        if isinstance(palavras_chave, list):
+            normalized_keywords = [str(item).strip() for item in palavras_chave if str(item).strip()]
+        if not normalized_keywords:
+            normalized_keywords = normalized_tags[:]
+
+        relacionados = metadata.get("relacionados")
+        normalized_relacionados = []
+        if isinstance(relacionados, list):
+            normalized_relacionados = [str(item).strip() for item in relacionados if str(item).strip()]
+
+        return {
+            "id": str(metadata.get("id") or "legacy-documento").strip() or "legacy-documento",
+            "titulo": titulo,
+            "resumo": str(metadata.get("resumo") or f"Documento legado: {titulo}").strip()
+            or f"Documento legado: {titulo}",
+            "tipo": str(metadata.get("tipo") or "informativo").strip() or "informativo",
+            "dominio": str(metadata.get("dominio") or "institucional").strip() or "institucional",
+            "subdominio": str(metadata.get("subdominio") or "geral").strip() or "geral",
+            "intencao": str(metadata.get("intencao") or "informar").strip() or "informar",
+            "publico_alvo": str(metadata.get("publico_alvo") or "estudantes").strip() or "estudantes",
+            "versao": versao,
+            "status": str(metadata.get("status") or "ativo").strip() or "ativo",
+            "idioma": str(metadata.get("idioma") or "pt-BR").strip() or "pt-BR",
+            "tags": normalized_tags[:30],
+            "palavras_chave": normalized_keywords[:40],
+            "fonte": str(metadata.get("fonte") or "documento_legado").strip() or "documento_legado",
+            "autor": str(metadata.get("autor") or "ufabc").strip() or "ufabc",
+            "confiabilidade": str(metadata.get("confiabilidade") or "media").strip() or "media",
+            "relacionados": normalized_relacionados[:40],
+            "atualizado_em": SQLAlchemyFileFeedRepository._normalize_date_string(
+                metadata.get("atualizado_em"),
+                today_iso,
+            ),
+            "criado_em": SQLAlchemyFileFeedRepository._normalize_date_string(
+                metadata.get("criado_em"),
+                today_iso,
+            ),
+        }

@@ -1,20 +1,36 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import insert
+
+from ufabc_chatbot.core.dependencies import get_engine
+from ufabc_chatbot.infrastructure.db.models import FileFeedItemORM
 
 
 VALID_MARKDOWN = """---
 id: regulamento-ufabc-2026
 titulo: Regulamento Geral UFABC
+resumo: Regras gerais de matricula e avaliacao da universidade.
 tipo: regulamento
 dominio: academico
 subdominio: matricula
+intencao: explicar_regras_academicas
+publico_alvo: estudantes
 versao: 1
 status: ativo
+idioma: pt-BR
 tags:
   - ufabc
   - matricula
   - regulamento
+palavras_chave:
+  - matricula
+  - trancamento
 fonte: documento_oficial
+autor: ufabc
+confiabilidade: alta
+relacionados:
+  - fluxo-matricula
 atualizado_em: 2026-03-22
+criado_em: 2026-01-10
 ---
 
 # Regulamento Geral UFABC
@@ -128,3 +144,69 @@ def test_front_matter_date_with_slashes_is_accepted(client: TestClient) -> None:
     assert upload_response.status_code == 201
     payload = upload_response.json()
     assert payload["document_metadata"]["atualizado_em"] == "2026-03-22"
+
+
+def test_old_metadata_structure_is_rejected(client: TestClient) -> None:
+    old_schema_markdown = """---
+id: antigo
+titulo: Documento Antigo
+tipo: faq
+dominio: academico
+subdominio: geral
+versao: 1
+status: ativo
+tags:
+  - ufabc
+fonte: documento_oficial
+atualizado_em: 2026-03-25
+---
+
+# Documento Antigo
+
+Conteudo.
+"""
+    upload_response = client.post(
+        "/api/v1/files/feed",
+        files={"file": ("old-schema.md", old_schema_markdown, "text/markdown")},
+    )
+    assert upload_response.status_code == 400
+
+
+def test_list_tree_handles_legacy_metadata_records(client: TestClient) -> None:
+    async def seed_legacy_record() -> None:
+        engine = get_engine()
+        async with engine.begin() as conn:
+            await conn.execute(
+                insert(FileFeedItemORM).values(
+                    id="11111111-1111-1111-1111-111111111111",
+                    original_filename="legacy.md",
+                    stored_filename="legacy/legacy.md",
+                    content_type="text/markdown",
+                    size_bytes=120,
+                    status="pending",
+                    document_metadata={
+                        "id": "legacy-doc",
+                        "titulo": "Legacy",
+                        "tipo": "faq",
+                        "dominio": "academico",
+                        "subdominio": "geral",
+                        "versao": 1,
+                        "status": "ativo",
+                        "tags": ["ufabc"],
+                        "fonte": "documento_oficial",
+                        "atualizado_em": "data-invalida",
+                        "criado_em": "",
+                    },
+                    storage_metadata={},
+                )
+            )
+
+    import asyncio
+    asyncio.run(seed_legacy_record())
+
+    response = client.get("/api/v1/files/tree")
+    assert response.status_code == 200
+    payload = response.json()
+    item = next((f for f in payload["files"] if f["id"] == "11111111-1111-1111-1111-111111111111"), None)
+    assert item is not None
+    assert item["document_metadata"]["titulo"] == "Legacy"

@@ -43,6 +43,16 @@ from ufabc_chatbot.presentation.api.file_feed_schemas import (
 router = APIRouter()
 
 
+def _upload_error_message(exc: Exception) -> str:
+    text = str(exc)
+    if "Non ascii characters found in S3 metadata" in text:
+        return (
+            "Falha ao enviar para storage: metadados S3 aceitam apenas ASCII. "
+            "Remova acentos dos valores de metadata ou use a rota de ingestao que normaliza automaticamente."
+        )
+    return text or "Upload failed due to an internal error."
+
+
 def _to_response(record: FileFeedRecord) -> FileFeedResponse:
     folder_path = _extract_folder_path(record.stored_filename)
     return FileFeedResponse(
@@ -117,6 +127,8 @@ async def upload_feed_file(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_upload_error_message(exc)) from exc
 
     return _to_response(record)
 
@@ -156,7 +168,7 @@ async def batch_upload_feed_files(
             results.append(BatchUploadFileResult(
                 filename=filename,
                 success=False,
-                error=str(exc),
+                error=_upload_error_message(exc),
             ))
 
     return BatchUploadResponse(
