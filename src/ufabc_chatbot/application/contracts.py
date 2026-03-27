@@ -1,7 +1,12 @@
 from typing import Any, Protocol, Sequence
 from uuid import UUID
 
-from ufabc_chatbot.domain.file_feed import FileFeedCreate, FileFeedRecord, FileFeedStatus
+from ufabc_chatbot.domain.file_feed import (
+    FileFeedCreate,
+    FileFeedRecord,
+    FileFeedStatus,
+    RAGDocumentMetadata,
+)
 from ufabc_chatbot.domain.models import ChatMessage
 
 
@@ -42,6 +47,24 @@ class FileFeedRepository(Protocol):
         stored_filename: str,
     ) -> FileFeedRecord | None:
         """Update storage key (path/key inside bucket) for a feed file."""
+
+    async def update_content_metadata(
+        self,
+        *,
+        file_id: UUID,
+        size_bytes: int,
+        document_metadata: RAGDocumentMetadata,
+        storage_metadata: dict[str, Any],
+    ) -> FileFeedRecord | None:
+        """Update content-derived fields after file body changes."""
+
+    async def update_storage_metadata(
+        self,
+        *,
+        file_id: UUID,
+        storage_metadata: dict[str, Any],
+    ) -> FileFeedRecord | None:
+        """Update storage metadata fields for a feed file record."""
 
     async def delete_by_folder_prefix(self, folder_prefix: str) -> int:
         """Delete all records whose stored_filename starts with the folder prefix."""

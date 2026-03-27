@@ -19,7 +19,9 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 
 from ufabc_chatbot.application.file_feed_service import FileFeedService, IncomingFeedFile
+from ufabc_chatbot.core.auth_dependencies import get_current_user
 from ufabc_chatbot.core.dependencies import get_file_feed_service
+from ufabc_chatbot.domain.auth import UserRecord
 from ufabc_chatbot.domain.file_feed import FileFeedRecord, FileFeedStatus
 from ufabc_chatbot.presentation.api.file_feed_schemas import (
     BatchUploadFileResult,
@@ -104,15 +106,37 @@ def _parse_storage_metadata(raw_storage_metadata: str | None) -> dict[str, Any]:
     return parsed
 
 
+def _with_audit_metadata(
+    metadata: dict[str, Any],
+    *,
+    uploaded_by: str | None = None,
+    approved_by: str | None = None,
+    last_modified_by: str | None = None,
+) -> dict[str, Any]:
+    result = dict(metadata)
+    if uploaded_by:
+        result["audit_uploaded_by"] = uploaded_by
+    if approved_by:
+        result["audit_approved_by"] = approved_by
+    if last_modified_by:
+        result["audit_last_modified_by"] = last_modified_by
+    return result
+
+
 @router.post("/files/feed", response_model=FileFeedResponse, status_code=status.HTTP_201_CREATED)
 async def upload_feed_file(
     file: UploadFile = File(...),
     storage_metadata: str | None = Form(default=None),
     folder_path: str | None = Form(default=None),
     service: FileFeedService = Depends(get_file_feed_service),
+    current_user: UserRecord = Depends(get_current_user),
 ) -> FileFeedResponse:
     content = await file.read()
-    parsed_storage_metadata = _parse_storage_metadata(storage_metadata)
+    parsed_storage_metadata = _with_audit_metadata(
+        _parse_storage_metadata(storage_metadata),
+        uploaded_by=current_user.email,
+        last_modified_by=current_user.email,
+    )
     incoming_file = IncomingFeedFile(
         filename=file.filename or "upload.bin",
         content_type=file.content_type,
@@ -139,8 +163,13 @@ async def batch_upload_feed_files(
     storage_metadata: str | None = Form(default=None),
     folder_path: str | None = Form(default=None),
     service: FileFeedService = Depends(get_file_feed_service),
+    current_user: UserRecord = Depends(get_current_user),
 ) -> BatchUploadResponse:
-    parsed_storage_metadata = _parse_storage_metadata(storage_metadata)
+    parsed_storage_metadata = _with_audit_metadata(
+        _parse_storage_metadata(storage_metadata),
+        uploaded_by=current_user.email,
+        last_modified_by=current_user.email,
+    )
     results: list[BatchUploadFileResult] = []
     succeeded = 0
 
@@ -295,10 +324,19 @@ async def update_feed_file_status(
     file_id: UUID,
     payload: UpdateFileFeedStatusRequest,
     service: FileFeedService = Depends(get_file_feed_service),
+    current_user: UserRecord = Depends(get_current_user),
 ) -> FileFeedResponse:
     record = await service.update_status(file_id=file_id, status=payload.status)
     if record is None:
         raise HTTPException(status_code=404, detail="Feed file record not found.")
+
+    if payload.status == "indexed":
+        updated = await service.merge_storage_metadata(
+            file_id=file_id,
+            updates={"audit_approved_by": current_user.email},
+        )
+        if updated is not None:
+            record = updated
 
     return _to_response(record)
 
@@ -498,11 +536,18 @@ async def update_feed_file_content(
     file_id: UUID,
     payload: UpdateFileFeedContentRequest,
     service: FileFeedService = Depends(get_file_feed_service),
+    current_user: UserRecord = Depends(get_current_user),
 ) -> Response:
     try:
-        await service.update_content(file_id, payload.markdown_text)
+        await service.update_content_with_actor(
+            file_id=file_id,
+            markdown_text=payload.markdown_text,
+            actor=current_user.email,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

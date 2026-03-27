@@ -128,11 +128,67 @@ class FileFeedService:
         return record, content.decode("utf-8", errors="replace")
 
     async def update_content(self, file_id: UUID, markdown_text: str) -> FileFeedRecord:
+        return await self.update_content_with_actor(
+            file_id=file_id,
+            markdown_text=markdown_text,
+            actor=None,
+        )
+
+    async def update_content_with_actor(
+        self,
+        *,
+        file_id: UUID,
+        markdown_text: str,
+        actor: str | None,
+    ) -> FileFeedRecord:
         record = await self._repository.get(file_id)
         if record is None:
             raise FileNotFoundError("Feed file record not found.")
-        await self._storage.save(record.stored_filename, markdown_text.encode("utf-8"))
-        return record
+        content_bytes = markdown_text.encode("utf-8")
+        document_metadata = self._extract_document_metadata(content_bytes)
+        preserved_storage_metadata = {
+            key: value
+            for key, value in record.storage_metadata.items()
+            if not key.startswith("document_")
+        }
+        if actor:
+            preserved_storage_metadata["audit_last_modified_by"] = actor
+        storage_metadata = self._build_storage_metadata(
+            document_metadata=document_metadata,
+            custom_storage_metadata=preserved_storage_metadata,
+        )
+
+        await self._storage.save(
+            record.stored_filename,
+            content_bytes,
+            metadata=storage_metadata,
+        )
+
+        updated = await self._repository.update_content_metadata(
+            file_id=file_id,
+            size_bytes=len(content_bytes),
+            document_metadata=document_metadata,
+            storage_metadata=storage_metadata,
+        )
+        if updated is None:
+            raise FileNotFoundError("Feed file record not found.")
+        return updated
+
+    async def merge_storage_metadata(
+        self,
+        *,
+        file_id: UUID,
+        updates: dict[str, Any],
+    ) -> FileFeedRecord | None:
+        record = await self._repository.get(file_id)
+        if record is None:
+            return None
+        merged = dict(record.storage_metadata)
+        merged.update(updates)
+        return await self._repository.update_storage_metadata(
+            file_id=file_id,
+            storage_metadata=merged,
+        )
 
     async def delete(self, file_id: UUID) -> FileFeedRecord | None:
         record = await self._repository.get(file_id)

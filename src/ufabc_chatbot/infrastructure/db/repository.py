@@ -1,11 +1,17 @@
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ufabc_chatbot.application.contracts import FileFeedRepository
-from ufabc_chatbot.domain.file_feed import FileFeedCreate, FileFeedRecord, FileFeedStatus
+from ufabc_chatbot.domain.file_feed import (
+    FileFeedCreate,
+    FileFeedRecord,
+    FileFeedStatus,
+    RAGDocumentMetadata,
+)
 from ufabc_chatbot.infrastructure.db.models import FileFeedItemORM
 
 
@@ -120,6 +126,46 @@ class SQLAlchemyFileFeedRepository(FileFeedRepository):
                 return None
 
             entity.original_filename = original_filename
+            await session.commit()
+            await session.refresh(entity)
+            return self._to_domain(entity)
+
+    async def update_content_metadata(
+        self,
+        *,
+        file_id: UUID,
+        size_bytes: int,
+        document_metadata: RAGDocumentMetadata,
+        storage_metadata: dict[str, Any],
+    ) -> FileFeedRecord | None:
+        statement = select(FileFeedItemORM).where(FileFeedItemORM.id == str(file_id))
+
+        async with self._session_factory() as session:
+            entity = await session.scalar(statement)
+            if entity is None:
+                return None
+
+            entity.size_bytes = size_bytes
+            entity.document_metadata = document_metadata.model_dump(mode="json")
+            entity.storage_metadata = storage_metadata
+            await session.commit()
+            await session.refresh(entity)
+            return self._to_domain(entity)
+
+    async def update_storage_metadata(
+        self,
+        *,
+        file_id: UUID,
+        storage_metadata: dict[str, Any],
+    ) -> FileFeedRecord | None:
+        statement = select(FileFeedItemORM).where(FileFeedItemORM.id == str(file_id))
+
+        async with self._session_factory() as session:
+            entity = await session.scalar(statement)
+            if entity is None:
+                return None
+
+            entity.storage_metadata = storage_metadata
             await session.commit()
             await session.refresh(entity)
             return self._to_domain(entity)

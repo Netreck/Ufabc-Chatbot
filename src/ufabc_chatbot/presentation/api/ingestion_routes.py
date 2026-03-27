@@ -9,8 +9,10 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ufabc_chatbot.application.file_feed_service import FileFeedService, IncomingFeedFile
+from ufabc_chatbot.core.auth_dependencies import get_current_user
 from ufabc_chatbot.core.config import Settings, get_settings
 from ufabc_chatbot.core.dependencies import get_file_feed_service
+from ufabc_chatbot.domain.auth import UserRecord
 from ufabc_chatbot.domain.file_feed import FileFeedRecord, RAGDocumentMetadata
 from ufabc_chatbot.presentation.api.file_feed_schemas import FileFeedResponse
 from ufabc_chatbot.presentation.api.ingestion_schemas import (
@@ -254,6 +256,7 @@ async def prepare_ingestion(
 async def commit_ingestion(
     payload: IngestionCommitRequest,
     service: FileFeedService = Depends(get_file_feed_service),
+    current_user: UserRecord = Depends(get_current_user),
 ) -> IngestionCommitResponse:
     filename = Path(payload.filename).name.strip()
     if not filename:
@@ -267,9 +270,12 @@ async def commit_ingestion(
         content=payload.markdown_text.encode("utf-8"),
     )
     try:
+        enriched_storage_metadata = dict(payload.storage_metadata)
+        enriched_storage_metadata["audit_uploaded_by"] = current_user.email
+        enriched_storage_metadata["audit_last_modified_by"] = current_user.email
         record = await service.ingest(
             incoming,
-            storage_metadata=payload.storage_metadata,
+            storage_metadata=enriched_storage_metadata,
             folder_path=payload.folder_path,
         )
     except ValueError as exc:

@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 
-def test_ingestion_prepare_requires_openai(client: TestClient) -> None:
+def test_ingestion_prepare_requires_openai(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     response = client.post(
         "/api/v1/ingestion/prepare",
         json={
@@ -10,12 +12,15 @@ def test_ingestion_prepare_requires_openai(client: TestClient) -> None:
                 "metadados estruturados e secoes em markdown."
             ),
         },
+        headers=auth_headers,
     )
     assert response.status_code == 503
     assert "OpenAI API nao configurada" in response.json()["detail"]
 
 
-def test_ingestion_commit_uploads_markdown(client: TestClient) -> None:
+def test_ingestion_commit_uploads_markdown(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     markdown = """---
 id: guia-ingestao-2026
 titulo: Guia de Ingestao
@@ -56,6 +61,7 @@ Documento preparado via endpoint de ingestao.
             "folder_path": "ingestao/2026",
             "storage_metadata": {"pipeline": "ingestion-ui"},
         },
+        headers=auth_headers,
     )
     assert response.status_code == 201
     payload = response.json()["file"]

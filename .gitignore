@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *.so
@@ -26,25 +27,41 @@ ENV/
 coverage.xml
 htmlcov/
 
-# Frontend dependencies/build caches
+# Frontend / Node
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/dist-ssr/
 frontend/.vite/
 *.tsbuildinfo
+.eslintcache
+.npm/
+.pnpm-store/
 
-# Local environment and secrets
+# Local env / secrets
 .env
 .env.*
 !.env.example
-design.md
-# IDE/OS files
+
+# IDE / OS
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# Project local runtime data
+# Runtime / local data
 data/
 tmp/
 *.log
+*.pid
+*.sqlite
+*.sqlite3
+
+# Local backup folders
+frontend-old/
+
+# Local AI tooling metadata
+.codex/
+.claude/
+design.md
+

@@ -34,6 +34,21 @@ class Settings(BaseSettings):
     )
     max_feed_file_size_mb: int = Field(default=25, alias="MAX_FEED_FILE_SIZE_MB")
 
+    # ── Auth ──
+    jwt_secret_key: str = Field(
+        default="CHANGE-ME-IN-PRODUCTION-use-openssl-rand-hex-32",
+        alias="JWT_SECRET_KEY",
+    )
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(default=15, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
+    cookie_samesite: Literal["lax", "strict", "none"] = Field(
+        default="lax", alias="COOKIE_SAMESITE"
+    )
+    admin_email: str | None = Field(default=None, alias="ADMIN_EMAIL")
+    admin_password: str | None = Field(default=None, alias="ADMIN_PASSWORD")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

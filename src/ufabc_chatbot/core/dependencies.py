@@ -3,9 +3,11 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
+from ufabc_chatbot.application.auth_service import AuthService
 from ufabc_chatbot.application.file_feed_service import FileFeedService
 from ufabc_chatbot.application.services import ChatService
 from ufabc_chatbot.core.config import get_settings
+from ufabc_chatbot.infrastructure.db.auth_repository import AuthRepository
 from ufabc_chatbot.infrastructure.db.repository import SQLAlchemyFileFeedRepository
 from ufabc_chatbot.infrastructure.llm.openai_provider import OpenAIProvider
 from ufabc_chatbot.infrastructure.storage.local_feed_storage import LocalFeedStorage
@@ -66,3 +68,10 @@ def get_file_feed_service() -> FileFeedService:
         storage=storage,
         max_file_size_mb=settings.max_feed_file_size_mb,
     )
+
+
+@lru_cache
+def get_auth_service() -> AuthService:
+    settings = get_settings()
+    repository = AuthRepository(get_session_factory())
+    return AuthService(repository=repository, settings=settings)
